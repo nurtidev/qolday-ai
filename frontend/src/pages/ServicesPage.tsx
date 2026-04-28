@@ -264,10 +264,13 @@ function ServiceRow({ service }: { service: Service }) {
 type ChipKind = 'org' | 'dir' | 'stage' | 'region'
 interface Chip { kind: ChipKind; id: string; label: string }
 
+const ITEMS_PER_PAGE = 10
+
 export function ServicesPage() {
   const [searchParams] = useSearchParams()
 
   const [search, setSearch]           = useState('')
+  const [page, setPage]               = useState(1)
   const [orgFilter, setOrgFilter]     = useState<string[]>(
     searchParams.get('org_name') ? [searchParams.get('org_name')!] : []
   )
@@ -317,8 +320,14 @@ export function ServicesPage() {
     return 0
   })
 
-  const toggle = (setter: React.Dispatch<React.SetStateAction<string[]>>) => (id: string) =>
+  const totalPages = Math.max(1, Math.ceil(sorted.length / ITEMS_PER_PAGE))
+  const currentPage = Math.min(page, totalPages)
+  const paged = sorted.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE)
+
+  const toggle = (setter: React.Dispatch<React.SetStateAction<string[]>>) => (id: string) => {
     setter((arr) => arr.includes(id) ? arr.filter((x) => x !== id) : [...arr, id])
+    setPage(1)
+  }
 
   const orgOptions = ORGS.map((o) => ({ id: o.id, label: o.short }))
   const dirOptions = DIRECTIONS
@@ -338,7 +347,7 @@ export function ServicesPage() {
   }
 
   const resetAll = () => {
-    setOrgFilter([]); setDirFilter([]); setStageFilter([]); setRegionFilter([]); setSearch('')
+    setOrgFilter([]); setDirFilter([]); setStageFilter([]); setRegionFilter([]); setSearch(''); setPage(1)
   }
 
   return (
@@ -504,31 +513,39 @@ export function ServicesPage() {
             </div>
           ) : view === 'grid' ? (
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 16 }}>
-              {sorted.map((s) => <ServiceCard key={s.id} service={s} />)}
+              {paged.map((s) => <ServiceCard key={s.id} service={s} />)}
             </div>
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-              {sorted.map((s) => <ServiceRow key={s.id} service={s} />)}
+              {paged.map((s) => <ServiceRow key={s.id} service={s} />)}
             </div>
           )}
 
           {/* Pagination */}
-          {sorted.length > 0 && (
+          {totalPages > 1 && (
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, marginTop: 32 }}>
-              <button className="btn btn-secondary btn-sm" disabled>
+              <button
+                className="btn btn-secondary btn-sm"
+                disabled={currentPage === 1}
+                onClick={() => setPage(currentPage - 1)}
+              >
                 <I.ChevronLeft size={14} />
               </button>
-              {[1, 2, 3, '…', 8].map((p, i) => (
+              {Array.from({ length: totalPages }, (_, i) => i + 1).map((p) => (
                 <button
-                  key={i}
-                  className={p === 1 ? 'btn btn-primary btn-sm' : 'btn btn-secondary btn-sm'}
-                  disabled={p === '…'}
+                  key={p}
+                  className={p === currentPage ? 'btn btn-primary btn-sm' : 'btn btn-secondary btn-sm'}
                   style={{ minWidth: 32, padding: 0 }}
+                  onClick={() => setPage(p)}
                 >
                   {p}
                 </button>
               ))}
-              <button className="btn btn-secondary btn-sm">
+              <button
+                className="btn btn-secondary btn-sm"
+                disabled={currentPage === totalPages}
+                onClick={() => setPage(currentPage + 1)}
+              >
                 <I.ChevronRight size={14} />
               </button>
             </div>
