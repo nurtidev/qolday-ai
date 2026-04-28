@@ -55,7 +55,7 @@ func (h *ApplicationsHandler) Create(w http.ResponseWriter, r *http.Request) {
 func (h *ApplicationsHandler) List(w http.ResponseWriter, r *http.Request) {
 	claims := middleware.ClaimsFromCtx(r.Context())
 
-	var apps []models.ApplicationWithService
+	apps := make([]models.ApplicationWithService, 0)
 	var err error
 
 	if claims.Role == "admin" {

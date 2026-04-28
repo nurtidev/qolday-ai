@@ -19,7 +19,7 @@ func NewNotificationsHandler(db *sqlx.DB) *NotificationsHandler {
 
 func (h *NotificationsHandler) List(w http.ResponseWriter, r *http.Request) {
 	claims := middleware.ClaimsFromCtx(r.Context())
-	var notifs []models.Notification
+	notifs := make([]models.Notification, 0)
 	if err := h.db.Select(&notifs,
 		`SELECT * FROM notifications WHERE user_id = $1 ORDER BY created_at DESC LIMIT 50`,
 		claims.UserID); err != nil {

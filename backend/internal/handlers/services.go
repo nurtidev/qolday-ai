@@ -45,7 +45,7 @@ func (h *ServicesHandler) List(w http.ResponseWriter, r *http.Request) {
 
 	query += ` ORDER BY created_at DESC`
 
-	var services []models.Service
+	services := make([]models.Service, 0)
 	if err := h.db.Select(&services, query, args...); err != nil {
 		respondErr(w, http.StatusInternalServerError, "failed to fetch services")
 		return

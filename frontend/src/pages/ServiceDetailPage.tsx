@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { servicesApi } from '@/api/client'
@@ -6,24 +6,10 @@ import { useAuthStore } from '@/store/auth'
 import { I } from '@/components/icons'
 import type { Service, FormField } from '@/types'
 
-const BENEFITS = [
-  'Льготная процентная ставка',
-  'Без залога для МСБ',
-  'Онлайн-подача заявки',
-  'Решение за 10 рабочих дней',
-]
-
-const REQUIREMENTS = [
-  'Резидент РК',
-  'Опыт работы от 1 года',
-  'Отсутствие задолженностей',
-  'Численность до 250 сотрудников',
-]
-
-const FAQ = [
-  { q: 'Кто может подать заявку?',               a: 'Субъекты МСБ, зарегистрированные в РК, с опытом работы от 1 года.' },
-  { q: 'Сколько времени занимает рассмотрение?',  a: 'До 10 рабочих дней с момента подачи полного пакета документов.' },
-  { q: 'Нужна ли ЭЦП для подачи?',               a: 'Да, для подписания заявки необходима действующая ЭЦП физического или юридического лица.' },
+const PORTAL_FAQ = [
+  { q: 'Как авторизоваться для подачи заявки?',  a: 'Используйте ИИН или БИН через eGov — кнопка «Войти» в верхнем меню. Регистрация не требуется.' },
+  { q: 'Как узнать статус заявки?',              a: 'Статус отображается в личном кабинете в разделе «Мои заявки» сразу после подачи.' },
+  { q: 'Нужна ли ЭЦП для подачи заявки?',       a: 'Для входа на портал ЭЦП не требуется — достаточно ИИН/БИН через eGov. Условия конкретной программы уточняйте у организации.' },
 ]
 
 const TABS = [
@@ -108,6 +94,27 @@ export function ServiceDetailPage() {
     queryFn: () => servicesApi.list().then(r => r.data),
     enabled: !!service,
   })
+
+  const allFields = useMemo(
+    () => service?.form_schema?.steps?.flatMap(s => s.fields) ?? [],
+    [service]
+  )
+
+  const benefits = useMemo(() => {
+    const b: string[] = ['Онлайн-подача заявки']
+    if (allFields.some(f => f.prefill_from)) b.push('Автозаполнение данных из eGov')
+    if (allFields.some(f => f.type === 'calculated')) b.push('Автоматический расчёт платежей')
+    if (allFields.some(f => f.type === 'file')) b.push('Загрузка документов онлайн')
+    if ((service?.form_schema?.steps?.length ?? 0) > 1) b.push('Пошаговое заполнение формы')
+    return b
+  }, [allFields, service])
+
+  const requirements = useMemo(() => {
+    if (!service?.form_schema?.steps?.length) return []
+    return service.form_schema.steps[0].fields
+      .filter(f => (f.type === 'select' || f.type === 'radio') && f.options?.length)
+      .map(f => `${f.label}: ${f.options!.join(', ')}`)
+  }, [service])
 
   if (isLoading) {
     return (
@@ -238,7 +245,7 @@ export function ServiceDetailPage() {
 
               <h3 style={{ fontSize: 16, fontWeight: 600, marginTop: 0, marginBottom: 16 }}>Ключевые преимущества</h3>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 32 }}>
-                {BENEFITS.map((b, i) => (
+                {benefits.map((b, i) => (
                   <div key={i} style={{ display: 'flex', gap: 10, padding: '12px 14px', background: 'var(--color-surface-2)', borderRadius: 8 }}>
                     <I.Check size={18} style={{ color: 'var(--color-success)', flexShrink: 0, marginTop: 1 }} strokeWidth={2.5} />
                     <span style={{ fontSize: 14, color: 'var(--color-text-2)', lineHeight: 1.45 }}>{b}</span>
@@ -251,31 +258,25 @@ export function ServiceDetailPage() {
           {/* Условия */}
           {tab === 'cond' && (
             <div className="page-fade">
-              <h2 style={{ fontSize: 20, fontWeight: 700, marginTop: 0, marginBottom: 16 }}>Кто может подать заявку</h2>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 32 }}>
-                {REQUIREMENTS.map((r, i) => (
-                  <div key={i} className="card" style={{ padding: '14px 18px', display: 'flex', gap: 12, alignItems: 'flex-start' }}>
-                    <div style={{
-                      width: 22, height: 22, borderRadius: '50%',
-                      background: 'var(--color-success-soft)', color: 'var(--color-success)',
-                      display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
-                    }}>
-                      <I.Check size={13} strokeWidth={3} />
+              <h2 style={{ fontSize: 20, fontWeight: 700, marginTop: 0, marginBottom: 16 }}>Критерии участия</h2>
+              {requirements.length === 0 ? (
+                <EmptySchemaInfo />
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 32 }}>
+                  {requirements.map((r, i) => (
+                    <div key={i} className="card" style={{ padding: '14px 18px', display: 'flex', gap: 12, alignItems: 'flex-start' }}>
+                      <div style={{
+                        width: 22, height: 22, borderRadius: '50%',
+                        background: 'var(--color-success-soft)', color: 'var(--color-success)',
+                        display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+                      }}>
+                        <I.Check size={13} strokeWidth={3} />
+                      </div>
+                      <span style={{ fontSize: 14, color: 'var(--color-text-2)', lineHeight: 1.5, paddingTop: 1 }}>{r}</span>
                     </div>
-                    <span style={{ fontSize: 14, color: 'var(--color-text-2)', lineHeight: 1.5, paddingTop: 1 }}>{r}</span>
-                  </div>
-                ))}
-              </div>
-
-              <div style={{
-                background: 'var(--color-warning-soft)', border: '1px solid #FCD34D',
-                borderRadius: 10, padding: '14px 18px', display: 'flex', gap: 12,
-              }}>
-                <I.Alert size={20} style={{ color: 'var(--color-warning)', flexShrink: 0, marginTop: 1 }} />
-                <div style={{ fontSize: 14, color: '#92400E', lineHeight: 1.55 }}>
-                  <strong>Не финансируются:</strong> производство и реализация подакцизных товаров, операции с ценными бумагами, деятельность ломбардов и игорный бизнес.
+                  ))}
                 </div>
-              </div>
+              )}
             </div>
           )}
 
@@ -350,8 +351,8 @@ export function ServiceDetailPage() {
           <div style={{ marginTop: 48 }}>
             <h2 style={{ fontSize: 20, fontWeight: 700, marginTop: 0, marginBottom: 16 }}>Часто задаваемые вопросы</h2>
             <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
-              {FAQ.map((f, i) => (
-                <div key={i} style={{ borderBottom: i < FAQ.length - 1 ? '1px solid var(--color-border)' : 'none' }}>
+              {PORTAL_FAQ.map((f, i) => (
+                <div key={i} style={{ borderBottom: i < PORTAL_FAQ.length - 1 ? '1px solid var(--color-border)' : 'none' }}>
                   <button
                     onClick={() => setOpenFaq(openFaq === i ? -1 : i)}
                     style={{

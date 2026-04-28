@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { servicesApi } from '@/api/client'
@@ -16,15 +16,9 @@ const ORGS = [
   { id: 'KazGuarantee',  short: 'KazGuarantee', color: '#DC2626', tag: 'KG' },
 ]
 
-const DIRECTIONS = [
-  { id: 'Финансирование', label: 'Финансирование', count: 23 },
-  { id: 'Гарантии',      label: 'Гарантии',       count: 9  },
-  { id: 'Экспорт',       label: 'Экспорт',        count: 14 },
-  { id: 'Инвестиции',    label: 'Инвестиции',     count: 11 },
-  { id: 'Агросектор',    label: 'Агросектор',     count: 16 },
-  { id: 'Гранты',        label: 'Гранты',         count: 7  },
-  { id: 'Лизинг',        label: 'Лизинг',         count: 5  },
-  { id: 'Субсидии',      label: 'Субсидии',       count: 8  },
+const DIRECTION_LABELS = [
+  'Финансирование', 'Гарантии', 'Экспорт', 'Инвестиции',
+  'Агросектор', 'Гранты', 'Лизинг', 'Субсидии',
 ]
 
 const STAGE_OPTIONS = [
@@ -284,6 +278,23 @@ export function ServicesPage() {
   const [regionFilter, setRegionFilter] = useState<string[]>([])
   const [sort, setSort]               = useState<'popular' | 'new'>('popular')
   const [view, setView]               = useState<'grid' | 'list'>('grid')
+
+  // All services (unfiltered) — for computing category counts
+  const { data: allServices = [] } = useQuery<Service[]>({
+    queryKey: ['services-all'],
+    queryFn: () => servicesApi.list().then((r) => r.data),
+  })
+
+  const categoryCounts = useMemo(() => {
+    const m: Record<string, number> = {}
+    allServices.forEach(s => { if (s.category) m[s.category] = (m[s.category] || 0) + 1 })
+    return m
+  }, [allServices])
+
+  const DIRECTIONS = useMemo(
+    () => DIRECTION_LABELS.map(label => ({ id: label, label, count: categoryCounts[label] ?? 0 })),
+    [categoryCounts]
+  )
 
   // Backend supports filtering by category + org_name (one value each)
   // We send the first active filter; UI shows multi-select for future extension
