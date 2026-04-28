@@ -1,0 +1,148 @@
+package handlers
+
+import (
+	"database/sql"
+	"net/http"
+	"time"
+
+	"github.com/go-chi/chi/v5"
+	"github.com/jmoiron/sqlx"
+	"github.com/nurtidev/qolday-ai/backend/internal/middleware"
+	"github.com/nurtidev/qolday-ai/backend/internal/models"
+)
+
+type ApplicationsHandler struct {
+	db *sqlx.DB
+}
+
+func NewApplicationsHandler(db *sqlx.DB) *ApplicationsHandler {
+	return &ApplicationsHandler{db: db}
+}
+
+func (h *ApplicationsHandler) Create(w http.ResponseWriter, r *http.Request) {
+	claims := middleware.ClaimsFromCtx(r.Context())
+	var req struct {
+		ServiceID string       `json:"service_id"`
+		FormData  models.JSONB `json:"form_data"`
+	}
+	if err := decode(r, &req); err != nil || req.ServiceID == "" {
+		respondErr(w, http.StatusBadRequest, "service_id required")
+		return
+	}
+
+	var app models.Application
+	err := h.db.QueryRowx(
+		`INSERT INTO applications (service_id, user_id, form_data, status)
+		 VALUES ($1, $2, $3, 'submitted') RETURNING *`,
+		req.ServiceID, claims.UserID, req.FormData,
+	).StructScan(&app)
+	if err != nil {
+		respondErr(w, http.StatusInternalServerError, "failed to create application")
+		return
+	}
+
+	// Create notification
+	h.db.Exec(
+		`INSERT INTO notifications (user_id, title, message) VALUES ($1, $2, $3)`,
+		claims.UserID,
+		"Заявка подана",
+		"Ваша заявка успешно подана и находится на рассмотрении.",
+	)
+
+	respond(w, http.StatusCreated, app)
+}
+
+func (h *ApplicationsHandler) List(w http.ResponseWriter, r *http.Request) {
+	claims := middleware.ClaimsFromCtx(r.Context())
+
+	var apps []models.ApplicationWithService
+	var err error
+
+	if claims.Role == "admin" {
+		err = h.db.Select(&apps,
+			`SELECT a.*, s.title AS service_title
+			 FROM applications a JOIN services s ON a.service_id = s.id
+			 ORDER BY a.created_at DESC`)
+	} else {
+		err = h.db.Select(&apps,
+			`SELECT a.*, s.title AS service_title
+			 FROM applications a JOIN services s ON a.service_id = s.id
+			 WHERE a.user_id = $1
+			 ORDER BY a.created_at DESC`,
+			claims.UserID)
+	}
+	if err != nil {
+		respondErr(w, http.StatusInternalServerError, "failed to fetch applications")
+		return
+	}
+	respond(w, http.StatusOK, apps)
+}
+
+func (h *ApplicationsHandler) Get(w http.ResponseWriter, r *http.Request) {
+	claims := middleware.ClaimsFromCtx(r.Context())
+	id := chi.URLParam(r, "id")
+
+	var app models.ApplicationWithService
+	err := h.db.Get(&app,
+		`SELECT a.*, s.title AS service_title
+		 FROM applications a JOIN services s ON a.service_id = s.id
+		 WHERE a.id = $1`, id)
+	if err != nil {
+		respondErr(w, http.StatusNotFound, "application not found")
+		return
+	}
+	if claims.Role != "admin" && app.UserID != claims.UserID {
+		respondErr(w, http.StatusForbidden, "forbidden")
+		return
+	}
+	respond(w, http.StatusOK, app)
+}
+
+func (h *ApplicationsHandler) UpdateStatus(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "id")
+	var req struct {
+		Status string `json:"status"`
+	}
+	if err := decode(r, &req); err != nil || req.Status == "" {
+		respondErr(w, http.StatusBadRequest, "status required")
+		return
+	}
+
+	validStatuses := map[string]bool{
+		"draft": true, "submitted": true, "in_review": true,
+		"approved": true, "rejected": true,
+	}
+	if !validStatuses[req.Status] {
+		respondErr(w, http.StatusBadRequest, "invalid status")
+		return
+	}
+
+	var app models.Application
+	err := h.db.QueryRowx(
+		`UPDATE applications SET status = $1, updated_at = $2 WHERE id = $3 RETURNING *`,
+		req.Status, time.Now(), id,
+	).StructScan(&app)
+	if err == sql.ErrNoRows {
+		respondErr(w, http.StatusNotFound, "application not found")
+		return
+	}
+	if err != nil {
+		respondErr(w, http.StatusInternalServerError, "failed to update status")
+		return
+	}
+
+	// Notify applicant
+	statusMessages := map[string]string{
+		"approved": "Ваша заявка одобрена.",
+		"rejected": "Ваша заявка отклонена.",
+		"in_review": "Ваша заявка взята в рассмотрение.",
+	}
+	if msg, ok := statusMessages[req.Status]; ok {
+		h.db.Exec(
+			`INSERT INTO notifications (user_id, title, message) VALUES ($1, $2, $3)`,
+			app.UserID, "Статус заявки изменён", msg,
+		)
+	}
+
+	respond(w, http.StatusOK, app)
+}

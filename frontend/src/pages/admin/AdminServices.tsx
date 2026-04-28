@@ -1,0 +1,106 @@
+import { Link } from 'react-router-dom'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { servicesApi } from '@/api/client'
+import { I } from '@/components/icons'
+import type { Service } from '@/types'
+
+export function AdminServices() {
+  const qc = useQueryClient()
+
+  const { data: services = [], isLoading } = useQuery<Service[]>({
+    queryKey: ['admin-services'],
+    queryFn: () => servicesApi.list().then(r => r.data),
+  })
+
+  const publish = useMutation({
+    mutationFn: (id: string) => servicesApi.publish(id),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['admin-services'] }),
+  })
+
+  const remove = useMutation({
+    mutationFn: (id: string) => servicesApi.delete(id),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['admin-services'] }),
+  })
+
+  return (
+    <div className="page-fade" style={{ maxWidth: 1200, margin: '0 auto', padding: '32px 28px' }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 28 }}>
+        <h1 style={{ fontSize: 24, fontWeight: 700, margin: 0, letterSpacing: '-0.01em' }}>Услуги</h1>
+        <Link to="/admin/services/new" className="btn btn-primary">
+          <I.Plus size={15} /> Создать услугу
+        </Link>
+      </div>
+
+      {isLoading ? (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+          {[...Array(4)].map((_, i) => (
+            <div key={i} className="skeleton" style={{ height: 64, borderRadius: 10 }} />
+          ))}
+        </div>
+      ) : (
+        <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
+          {services.length === 0 ? (
+            <div style={{ textAlign: 'center', padding: '48px 24px', color: 'var(--color-text-3)' }}>
+              Нет услуг.{' '}
+              <Link to="/admin/services/new" style={{ color: 'var(--color-accent)', fontWeight: 500 }}>
+                Создать первую
+              </Link>
+            </div>
+          ) : (
+            services.map((service, i) => (
+              <div key={service.id} style={{
+                display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                padding: '16px 20px',
+                borderTop: i > 0 ? '1px solid var(--color-border)' : 'none',
+              }}>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: 14, fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: 'var(--color-text)' }}>
+                    {service.title}
+                  </div>
+                  <div style={{ display: 'flex', gap: 12, marginTop: 4, fontSize: 12, color: 'var(--color-text-3)' }}>
+                    <span>{service.category ?? 'Без категории'}</span>
+                    {service.org_name && <span>{service.org_name}</span>}
+                  </div>
+                </div>
+
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginLeft: 16, flexShrink: 0 }}>
+                  <span className={service.status === 'published' ? 'badge badge-green' : 'badge badge-gray'}>
+                    {service.status === 'published' ? 'Опубликована' : 'Черновик'}
+                  </span>
+
+                  {service.status !== 'published' && (
+                    <button
+                      onClick={() => publish.mutate(service.id)}
+                      disabled={publish.isPending}
+                      className="btn btn-ghost btn-sm"
+                      style={{ color: 'var(--color-success)', fontSize: 13 }}
+                    >
+                      Опубликовать
+                    </button>
+                  )}
+
+                  <Link
+                    to={`/admin/services/${service.id}/edit`}
+                    className="btn btn-ghost btn-sm"
+                    style={{ fontSize: 13 }}
+                  >
+                    <I.Wand size={14} /> Редактировать
+                  </Link>
+
+                  <button
+                    onClick={() => { if (confirm('Удалить услугу?')) remove.mutate(service.id) }}
+                    disabled={remove.isPending}
+                    className="btn btn-ghost btn-sm"
+                    style={{ color: 'var(--color-danger)', fontSize: 13 }}
+                  >
+                    <I.Trash size={14} /> Удалить
+                  </button>
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+      )}
+    </div>
+  )
+}

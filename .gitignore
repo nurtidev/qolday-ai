@@ -1,0 +1,32 @@
+# Go
+backend/bin/
+backend/*.exe
+backend/*.test
+backend/tmp/
+backend/uploads/
+
+# Frontend
+frontend/node_modules/
+frontend/dist/
+frontend/.env.local
+frontend/.env.*.local
+
+# Environment
+.env
+*.env
+
+# Docker volumes
+.docker/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/settings.json
+.idea/
+*.swp
+*.swo
+
+# Logs
+*.log
