@@ -1,7 +1,7 @@
 FROM node:20-alpine AS builder
 WORKDIR /app
 COPY package*.json ./
-RUN npm ci
+RUN PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 npm ci
 COPY . .
 RUN npm run build
 
