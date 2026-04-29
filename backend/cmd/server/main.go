@@ -67,6 +67,11 @@ func main() {
 	r.With(authMw).Handle("/uploads/*", http.StripPrefix("/uploads/",
 		http.FileServer(http.Dir(cfg.UploadDir))))
 
+	r.Get("/api/health", func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.Write([]byte(`{"status":"ok"}`))
+	})
+
 	r.Route("/api", func(r chi.Router) {
 		// Auth
 		r.Post("/auth/login", authH.Login)
